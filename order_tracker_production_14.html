@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Производство — Трекер</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;font-size:13px;background:#f0f2f5;color:#222}
+h1{font-size:16px;font-weight:700;padding:10px 16px;background:#1e3a5f;color:#fff;display:flex;align-items:center;gap:10px}
+h1 .fb{font-size:11px;font-weight:400;opacity:.7;margin-left:auto}
+.layout{display:flex;height:calc(100vh - 42px)}
+.left{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+.right{width:270px;background:#fff;border-left:2px solid #dde;display:flex;flex-direction:column;overflow:hidden}
+.right-head{padding:10px 12px;border-bottom:1px solid #eee;font-weight:700;font-size:13px;color:#1e3a5f;background:#f8faff}
+.right-body{flex:1;overflow-y:auto;padding:8px 10px}
+.right-foot{padding:10px;border-top:1px solid #eee}
+
+/* Карточки */
+.stats{display:flex;gap:10px;flex-wrap:wrap}
+.card{background:#fff;border-radius:8px;padding:10px 16px;border:1px solid #dde;min-width:130px}
+.card .v{font-size:26px;font-weight:700;color:#1e3a5f}
+.card .l{font-size:10px;color:#888;margin-top:1px}
+
+/* Среднее */
+.avg-row{background:#fff;border-radius:8px;border:1px solid #dde;padding:10px 16px;display:flex;align-items:center;gap:16px}
+.avg-row .av{font-size:22px;font-weight:700;color:#7c3aed}
+.avg-row .al{font-size:11px;color:#666}
+.avg-row .aw{font-size:10px;color:#aaa}
+
+/* Таблица */
+.tbl-wrap{background:#fff;border-radius:8px;border:1px solid #dde;overflow:auto;flex:1}
+table{width:100%;border-collapse:collapse}
+th{background:#1e3a5f;color:#fff;font-size:11px;font-weight:600;padding:7px 8px;text-align:left;white-space:nowrap;position:sticky;top:0;z-index:2}
+td{padding:5px 7px;border-bottom:1px solid #f0f0f0;font-size:11px;vertical-align:middle}
+tr:hover td{background:#f7f9ff}
+.timer-run{color:#16a34a;font-weight:700}
+.badge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600}
+.bw{background:#dbeafe;color:#1d4ed8}
+.bd{background:#dcfce7;color:#15803d}
+.done-btn{font-size:11px;padding:3px 10px;background:#dc2626;color:#fff;border:none;border-radius:4px;cursor:pointer;white-space:nowrap}
+.done-btn:hover{background:#b91c1c}
+.done-btn:disabled{background:#ccc;cursor:default}
+
+/* Сотрудники */
+.emp-item{display:flex;align-items:center;gap:6px;padding:4px 2px;border-bottom:1px solid #f5f5f5}
+.emp-dept{font-size:9px;color:#999;width:46px;flex-shrink:0;text-align:right;padding-right:5px;border-right:1px solid #eee}
+.emp-name{flex:1;font-size:11px;line-height:1.3}
+.chk{width:20px;height:20px;border-radius:3px;border:2px solid #ccc;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;transition:all .15s;user-select:none}
+.chk.on{background:#16a34a;border-color:#16a34a;color:#fff}
+.on-cnt{font-size:11px;color:#16a34a;font-weight:700;padding:4px 2px 6px}
+.save-btn{width:100%;padding:9px;background:#1e3a5f;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600}
+.save-btn:hover{background:#2a4f7f}
+
+/* Лок */
+#lock{position:fixed;inset:0;background:#1e3a5f;display:flex;align-items:center;justify-content:center;z-index:999}
+.lbox{background:#fff;padding:28px;border-radius:12px;text-align:center;width:280px}
+.lbox h2{margin-bottom:8px;color:#1e3a5f}
+.lbox input{width:100%;padding:9px;border:1px solid #ddd;border-radius:6px;margin:10px 0;text-align:center;font-size:15px}
+.lbox button{width:100%;padding:10px;background:#1e3a5f;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px}
+.lerr{color:red;font-size:12px;margin-top:4px;min-height:16px}
+</style>
+</head>
+<body>
+
+<div id="lock">
+  <div class="lbox">
+    <h2>🔒 Производство</h2>
+    <p style="font-size:12px;color:#888">Введите пароль для входа</p>
+    <input type="password" id="li" placeholder="••••••••" onkeydown="if(event.key==='Enter')chkPass()">
+    <button onclick="chkPass()">Войти</button>
+    <div class="lerr" id="lerr"></div>
+  </div>
+</div>
+
+<h1>🏭 Производство <span class="fb" id="fb-status">⏳ подключение...</span><button id="pause-btn" onclick="togglePause()" style="margin-left:16px;padding:4px 14px;border-radius:5px;border:1px solid #f59e0b;background:#fffbeb;color:#92400e;cursor:pointer;font-size:12px;font-weight:600">⏸ Остановить</button></h1>
+
+<div class="layout">
+  <div class="left">
+    <div class="stats">
+      <div class="card"><div class="v" id="cnt-o">0</div><div class="l">Заказов в работе</div></div>
+      <div class="card"><div class="v" id="cnt-d">0</div><div class="l">Завершено</div></div>
+    </div>
+    <div class="avg-row">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;width:100%">
+        <div>
+          <div class="av" id="avg-v">—</div>
+          <div class="al">Среднее время выполнения заказа</div>
+          <div class="aw" id="avg-w">за выбранный период</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <input type="date" id="avg-from" style="padding:5px 8px;border:1px solid #ddd;border-radius:5px;font-size:12px">
+          <span style="color:#888;font-size:13px">—</span>
+          <input type="date" id="avg-to" style="padding:5px 8px;border:1px solid #ddd;border-radius:5px;font-size:12px">
+          <button onclick="calcAvg()" style="padding:5px 14px;background:#7c3aed;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600">Рассчитать</button>
+          <button onclick="resetAvg()" style="padding:5px 10px;background:#f3f4f6;color:#555;border:1px solid #ddd;border-radius:5px;cursor:pointer;font-size:12px">Сброс</button>
+        </div>
+        <div id="avg-detail" style="font-size:11px;color:#888"></div>
+      </div>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th>#</th><th>№ Заказа</th><th>№ Договор</th><th>Кол-во сотр. сегодня</th>
+          <th>Начало → Конец</th><th></th><th>Время в работе</th><th>Статус</th><th></th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="right">
+    <div class="right-head">👥 Сотрудники на работе сегодня</div>
+    <div class="right-body">
+      <div class="on-cnt" id="on-cnt">На работе: 0</div>
+      <div id="emp-list"></div>
+    </div>
+    <div class="right-foot" style="display:flex;flex-direction:column;gap:6px">
+      <button class="save-btn" onclick="savePresence()" style="background:#16a34a">✅ Сохранить присутствие</button>
+      <button class="save-btn" onclick="saveExcel()">💾 Выгрузить в Excel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const PASS='1234';
+function chkPass(){
+  if(document.getElementById('li').value===PASS){
+    document.getElementById('lock').style.display='none';
+  } else {
+    document.getElementById('lerr').textContent='Неверный пароль';
+  }
+}
+
+const EMPS=[
+  {d:'ИТР',    n:'Долгов М.П.',     row:7},
+  {d:'ИТР',    n:'Глухов С.С.',     row:8},
+  {d:'пила',   n:'Цыганов Е.Г.',    row:9},
+  {d:'пила',   n:'Дегтерёв Д.А.',   row:11},
+  {d:'пила',   n:'Кудашёв Данила',  row:12},
+  {d:'кромка', n:'Макаренко Я.Р.',  row:14},
+  {d:'кромка', n:'Курносов В.А.',   row:17},
+  {d:'кромка', n:'Глухова И.А.',    row:18},
+  {d:'фасад',  n:'Песчакин А.И.',   row:19},
+  {d:'фасад',  n:'Курочкин А.Ю.',   row:20},
+  {d:'ПВХ',    n:'Чибрикова Ю.Д.', row:22},
+  {d:'ПВХ',    n:'Ванин М.А.',      row:23},
+  {d:'СВЕРЛО', n:'Дондю Решит',     row:25},
+  {d:'СВЕРЛО', n:'Шейгунов А.С.',   row:26},
+  {d:'ШПОН',   n:'Вешняков В.А.',   row:27},
+  {d:'Ал.',    n:'Винокуров Е.В.',  row:29},
+  {d:'Ал.',    n:'Поцелуев С.',     row:30},
+  {d:'ЧПУ',    n:'Маньяков В.Д.',   row:31},
+  {d:'ЧПУ',    n:'Шестаков И.М.',   row:32},
+  {d:'Фурн',   n:'Мунтяну Е.В.',    row:33},
+  {d:'Фурн',   n:'Щербакова М.А.',  row:34},
+  {d:'Упак.',  n:'Ременюк И.В.',    row:35},
+  {d:'Упак.',  n:'Хичин А.С.',      row:36},
+  {d:'Упак.',  n:'Чернышков М.В.',  row:38},
+  {d:'маляр',  n:'Лошкарёв Е.А.',   row:39},
+  {d:'маляр',  n:'Короткова Е.А.',  row:40},
+  {d:'маляр',  n:'Трошин С.',       row:41},
+  {d:'маляр',  n:'Смоляков А.',     row:42},
+];
+
+let empOn={};
+let globalPaused=false;
+let pausedAt={};  // key -> timestamp когда поставили на паузу      // {name: true} — кто сегодня на работе
+let empDate='';    // дата последнего сброса
+let prodOrders={};
+let weekStats={key:'',times:[]};
+
+// ---- HELPERS ----
+function fmtMs(ms){
+  if(!ms||ms<0)return'0мин';
+  const h=Math.floor(ms/3600000),m=Math.floor((ms%3600000)/60000);
+  return h>0?h+'ч '+m+'мин':m+'мин';
+}
+function fmtDt(ts){
+  if(!ts)return'—';
+  const d=new Date(Number(ts));
+  return d.toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit',year:'2-digit'})
+    +' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+}
+function weekKey(){
+  const d=new Date(); d.setHours(0,0,0,0);
+  d.setDate(d.getDate()-(d.getDay()||7)+1);
+  return d.toISOString().slice(0,10);
+}
+function todayKey(){
+  const d=new Date();
+  // Локальная дата (не UTC)
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+// ---- RENDER ----
+function render(){
+  // Сотрудники — empOn это {name:true}, сброс по дате
+  const today=todayKey();
+  if(empDate && empDate!==today){ empOn={}; empDate=today; }
+  const onToday=Object.keys(empOn).filter(k=>k!=='_date'&&empOn[k]===true);
+  document.getElementById('on-cnt').textContent='На работе сегодня: '+onToday.length;
+
+
+
+  // Таблица
+  const hasTook=o=>o.tookTs!=null&&o.tookTs!==undefined;
+  const list=Object.values(prodOrders).sort((a,b)=>Number(a.startTs||0)-Number(b.startTs||0));
+  let inWork=0,done=0;
+  document.getElementById('tbody').innerHTML=list.map((o,i)=>{
+    const running=o.startTs&&!o.endTs;
+    if(running)inWork++; else if(o.endTs)done++;
+    const elapsed=running?(Date.now()-Number(o.startTs)):(o.doneMs||0);
+    const timerHtml=running
+      ?`<span class="timer-run">⏱ ${fmtMs(elapsed)}</span>`
+      :fmtMs(elapsed);
+    // Нач = поступление заказа (startTs из Кон_99), Кон = после Сдал
+    const dtLine=
+      '<span style="font-size:10px;color:#888">Нач:&nbsp;</span><b>'+fmtDt(o.startTs)+'</b>'
+      +(o.endTs?'<br><span style="font-size:10px;color:#888">Кон:&nbsp;</span><b>'+fmtDt(o.endTs)+'</b>':'');
+    // Время в работе = от Взял до Сдал
+    const tookN=hasTook(o)?Number(o.tookTs):null;
+    let workMs=null;
+    if(tookN!=null&&o.endTs) workMs=o.endTs-tookN;
+    else if(tookN!=null&&!o.endTs){
+      if(globalPaused&&pausedAt[o._key]) workMs=pausedAt[o._key]-tookN;
+      else workMs=Date.now()-tookN;
+    }
+    const workHtml=workMs!=null
+      ?(o.endTs?fmtMs(workMs):(globalPaused&&pausedAt[o._key]?'⏸ '+fmtMs(workMs):'<span class="timer-run">⏱ '+fmtMs(workMs)+'</span>'))
+      :'—';
+    const badge=o.endTs
+      ?'<span class="badge bd">завершён</span>'
+      :o.tookTs!=null?'<span class="badge bw">взял</span>'
+      :'<span class="badge" style="background:#fef3c7;color:#92400e">ожидает</span>';
+    const tookBtn=o.endTs
+      ?''
+      :o.tookTs!=null
+        ?`<button class="done-btn" style="background:#6b7280" disabled>Взял ✓</button>`
+        :`<button class="done-btn" style="background:#2563eb" onclick="tookOrder('${o._key}')">📥 Взял</button>`;
+    const doneBtn=o.endTs
+      ?'<button class="done-btn" disabled>Сдан</button>'
+      :o.tookTs!=null
+        ?`<button class="done-btn" onclick="doneOrder('${o._key}')">✓ Сдать</button>`
+        :'<button class="done-btn" disabled style="background:#ccc">Сдать</button>';
+
+    return`<tr>
+      <td>${i+1}</td>
+      <td>${o.order||'—'}</td>
+      <td>${o.contract||'—'}</td>
+      <td style="text-align:center;font-weight:700">${onToday.length}</td>
+      <td style="font-size:10px;line-height:1.6">${dtLine}</td>
+      <td style="text-align:center">${tookBtn}</td>
+      <td>${workHtml}</td>
+      <td>${badge}</td>
+      <td>${doneBtn}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('cnt-o').textContent=inWork;
+  document.getElementById('cnt-d').textContent=done;
+
+  // Список сотрудников
+  const onSet=new Set(onToday); // onToday уже массив имён
+  document.getElementById('emp-list').innerHTML=EMPS.map(e=>`
+    <div class="emp-item">
+      <div class="emp-dept">${e.d}</div>
+      <div class="emp-name">${e.n}</div>
+      <div class="chk ${onSet.has(e.n)?'on':'off'}" onclick="toggleEmp('${e.n}')">${onSet.has(e.n)?'✓':''}</div>
+    </div>
+  `).join('');
+}
+
+function toggleEmp(name){
+  if(empOn[name]===true){
+    const p=prompt('Введите пароль для отмены:');
+    if(p===null)return;
+    if(p!==PASS){alert('Неверный пароль');return;}
+    delete empOn[name];
+  } else {
+    empOn[name]=true;
+  }
+  empOn['_date']=todayKey();
+  if(window._saveEmp) window._saveEmp(empOn);
+  render();
+}
+
+function tookOrder(key){
+  const o=prodOrders[key];
+  if(!o||o.tookTs||o.endTs)return;
+  o.tookTs=Date.now();
+  if(window._saveProd) window._saveProd(key,{tookTs:o.tookTs});
+  render();
+}
+
+function doneOrder(key){
+  if(!confirm('Подтвердить сдачу заказа?'))return;
+  const o=prodOrders[key];
+  if(!o||o.endTs)return;
+  const now=Date.now();
+  o.endTs=now;
+  o.doneMs=now-Number(o.startTs);
+  o.workMs=o.tookTs?(now-Number(o.tookTs)):null;
+  o.wk=weekKey();
+  if(window._saveProd) window._saveProd(key,{endTs:o.endTs,doneMs:o.doneMs,workMs:o.workMs,wk:o.wk});
+  render();
+}
+
+setInterval(render,1000);
+
+function updatePauseBtn(){
+  const btn=document.getElementById('pause-btn');
+  if(!btn)return;
+  if(globalPaused){
+    btn.textContent='▶ Возобновить';
+    btn.style.borderColor='#22c55e';
+    btn.style.background='#f0fdf4';
+    btn.style.color='#166534';
+  } else {
+    btn.textContent='⏸ Остановить';
+    btn.style.borderColor='#f59e0b';
+    btn.style.background='#fffbeb';
+    btn.style.color='#92400e';
+  }
+}
+
+function togglePause(){
+  if(!globalPaused){
+    // Останавливаем — запоминаем когда
+    const now=Date.now();
+    Object.values(prodOrders).forEach(o=>{
+      if(o.tookTs!=null&&o.tookTs!==undefined&&!o.endTs){
+        pausedAt[o._key]=now;
+      }
+    });
+    globalPaused=true;
+    updatePauseBtn();
+    render();
+  } else {
+    // Возобновить — пароль
+    const p=prompt('Введите пароль для возобновления:');
+    if(p===null)return;
+    if(p!==PASS){alert('Неверный пароль');return;}
+    const now=Date.now();
+    Object.values(prodOrders).forEach(o=>{
+      if(pausedAt[o._key]&&!o.endTs){
+        // Сдвигаем tookTs вперёд на время паузы
+        const pauseDur=now-pausedAt[o._key];
+        o.tookTs=Number(o.tookTs)+pauseDur;
+        delete pausedAt[o._key];
+        if(window._saveProd) window._saveProd(o._key,{tookTs:o.tookTs});
+      }
+    });
+    globalPaused=false;
+    updatePauseBtn();
+    render();
+  }
+}
+
+function calcAvg(){
+  const from=document.getElementById('avg-from').value;
+  const to=document.getElementById('avg-to').value;
+  if(!from||!to){alert('Выберите даты');return;}
+  const fromTs=new Date(from).getTime();
+  const toTs=new Date(to).getTime()+86400000-1; // до конца дня
+  const filtered=Object.values(prodOrders).filter(o=>{
+    if(!o.endTs||!o.workMs)return false;
+    return Number(o.endTs)>=fromTs && Number(o.endTs)<=toTs;
+  });
+  if(!filtered.length){
+    document.getElementById('avg-v').textContent='—';
+    document.getElementById('avg-w').textContent='Нет завершённых заказов за период';
+    document.getElementById('avg-detail').textContent='';
+    return;
+  }
+  const avg=filtered.reduce((a,b)=>a+(b.workMs||0),0)/filtered.length;
+  document.getElementById('avg-v').textContent=fmtMs(avg);
+  document.getElementById('avg-w').textContent=from.split('-').reverse().join('.')+'  —  '+to.split('-').reverse().join('.');
+  document.getElementById('avg-detail').textContent='Заказов: '+filtered.length+' | Мин: '+fmtMs(Math.min(...filtered.map(o=>o.workMs)))+' | Макс: '+fmtMs(Math.max(...filtered.map(o=>o.workMs)));
+}
+
+function resetAvg(){
+  document.getElementById('avg-from').value='';
+  document.getElementById('avg-to').value='';
+  document.getElementById('avg-v').textContent='—';
+  document.getElementById('avg-w').textContent='за выбранный период';
+  document.getElementById('avg-detail').textContent='';
+}
+
+function savePresence(){
+  if(window._saveEmp){
+    empOn['_date']=todayKey();
+    window._saveEmp(empOn);
+    const cnt=Object.keys(empOn).filter(k=>empOn[k]===true).length;
+    alert('✅ Сохранено! На работе сегодня: '+cnt+' чел.');
+  }
+}
+
+// ---- EXCEL EXPORT ----
+async function saveExcel(){
+  // Берём кто отмечен прямо из DOM — самый надёжный способ
+  const onSet=new Set();
+  document.querySelectorAll('.chk.on').forEach(el=>{
+    const name=el.closest('.emp-item').querySelector('.emp-name').textContent.trim();
+    onSet.add(name);
+  });
+
+  // Читаем оригинал через ArrayBuffer если доступен, иначе создаём с нуля
+  const wb=XLSX.utils.book_new();
+
+  // Лист табеля — воспроизводим структуру оригинала
+  const AOA=[];
+  // Строка 1-3 пустые
+  AOA.push([]);AOA.push([]);AOA.push([]);
+  // Строка 4 — дата
+  AOA.push([new Date().toLocaleDateString('ru-RU')]);
+  // Строка 5 — заголовки
+  AOA.push(['№','Ф.И.О.','пн','вт','ср','чт','пт','сб','вс','пн','вт','ср','чт','пт','сб','вс','пн','итого за 1/2 месяца','вт','ср','чт','пт','сб','вс','пн','вт','ср','чт','пт','сб','вс','пн','вт','На работе сегодня']);
+  // Строка 6 — числа дней
+  AOA.push(['','',1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,'',16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,'']);
+
+  const deptMap={
+    'Долгов М.П.':'ИТР','Глухов С.С.':'ИТР',
+    'Цыганов Е.Г.':'пила','Дегтерёв Д.А.':'пила','Кудашёв Данила':'пила',
+    'Макаренко Я.Р.':'кромка','Курносов В.А.':'кромка','Глухова И.А.':'кромка',
+    'Песчакин А.И.':'фасад','Курочкин А.Ю.':'фасад',
+    'Чибрикова Ю.Д.':'ПВХ','Ванин М.А.':'ПВХ',
+    'Дондю Решит':'СВЕРЛО','Шейгунов А.С.':'СВЕРЛО',
+    'Вешняков В.А.':'ШПОН',
+    'Винокуров Е.В.':'Ал.','Поцелуев С.':'Ал.',
+    'Маньяков В.Д.':'ЧПУ','Шестаков И.М.':'ЧПУ',
+    'Мунтяну Е.В.':'Фурн','Щербакова М.А.':'Фурн',
+    'Ременюк И.В.':'Упак.','Хичин А.С.':'Упак.','Чернышков М.В.':'Упак.',
+    'Лошкарёв Е.А.':'маляр','Короткова Е.А.':'маляр','Трошин С.':'маляр','Смоляков А.':'маляр',
+  };
+
+  EMPS.forEach((e,i)=>{
+    const row=new Array(34).fill('');
+    row[0]=deptMap[e.n]||'';
+    row[1]=e.n;
+    row[33]=onSet.has(e.n)?'✓ на работе':'';
+    AOA.push(row);
+  });
+
+  // Итого
+  AOA.push([]);
+  AOA.push(['','Итого на работе сегодня:','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','',onSet.size+' чел.']);
+
+  const ws=XLSX.utils.aoa_to_sheet(AOA);
+  ws['!cols']=[{wch:8},{wch:22},...Array(31).fill({wch:4}),{wch:4},{wch:16}];
+  XLSX.utils.book_append_sheet(wb,ws,'Табель');
+
+  // Лист заказов
+  const today3=todayKey();
+  const cntToday=onSet.size;
+  console.log('prodOrders:', JSON.stringify(prodOrders));
+  console.log('empOn:', JSON.stringify(empOn));
+  const ordAOA=[['#','№ Заказа','№ Договор','Кол-во сотр. сегодня','Начало','Конец','Время в работе','Статус']];
+  Object.values(prodOrders).sort((a,b)=>Number(a.startTs||0)-Number(b.startTs||0)).forEach((o,i)=>{
+    const ms=o.endTs?o.doneMs:(o.startTs?Date.now()-Number(o.startTs):0);
+    ordAOA.push([i+1,o.order||'',o.contract||'',cntToday,fmtDt(o.startTs),o.endTs?fmtDt(o.endTs):'—',fmtMs(ms),o.endTs?'завершён':'в работе']);
+  });
+  // Среднее
+  const wk=weekKey();
+  const avg=Object.values(prodOrders).filter(o=>o.endTs&&o.wk===wk).map(o=>o.doneMs||0);
+  const avgVal=avg.length?avg.reduce((a,b)=>a+b,0)/avg.length:0;
+  ordAOA.push([]);
+  ordAOA.push(['Среднее время (неделя '+wk+'):', avgVal>0?fmtMs(avgVal):'—']);
+
+  const ws2=XLSX.utils.aoa_to_sheet(ordAOA);
+  ws2['!cols']=[{wch:4},{wch:10},{wch:12},{wch:18},{wch:16},{wch:16},{wch:14},{wch:12}];
+  XLSX.utils.book_append_sheet(wb,ws2,'Заказы');
+
+  const d=new Date();
+  XLSX.writeFile(wb,`производство_${d.getDate()}.${d.getMonth()+1}.${d.getFullYear()}.xlsx`);
+}
+</script>
+
+<script type="module">
+import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import{getDatabase,ref,onValue,set,update}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+const cfg={
+  apiKey:"AIzaSyDbVK9u8VmlbiftqBxYDRXCpwVGoqNiANA",
+  authDomain:"tracker-orders-19965.firebaseapp.com",
+  databaseURL:"https://tracker-orders-19965-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId:"tracker-orders-19965",
+  storageBucket:"tracker-orders-19965.firebasestorage.app",
+  messagingSenderId:"369354052893",
+  appId:"1:369354052893:web:6e3e43c5d25bc7ee31fdf4"
+};
+const app=initializeApp(cfg);
+const db=getDatabase(app);
+
+// Слушаем заказы из РАЗРАБОТКИ — ловим kon99
+onValue(ref(db,'orders'),snap=>{
+  const data=snap.val()||{};
+  Object.entries(data).forEach(([k,o])=>{
+    if(o.kon99){
+      if(!prodOrders[k]){
+        prodOrders[k]={
+          _key:k,
+          order:o.order,
+          contract:o.contract,
+          worker:o.worker,
+          startTs:Number(new Date(o.kon99)),
+          tookTs:null,
+          endTs:null,
+          doneMs:null,
+          workMs:null,
+          wk:null,
+        };
+      }
+    }
+  });
+  document.getElementById('fb-status').textContent='🟢 подключено';
+  render();
+},e=>{document.getElementById('fb-status').textContent='🔴 ошибка';});
+
+// Слушаем данные производства
+onValue(ref(db,'production'),snap=>{
+  const data=snap.val()||{};
+  const empRaw=data._emp||{};
+  const today2=todayKey();
+  if((empRaw._date||'')===today2){
+    empOn=empRaw;
+    empDate=today2;
+  } else {
+    empOn={};
+    empDate=today2;
+  }
+  // Мержим завершённые заказы — обновляем существующие И создаём новые
+  Object.entries(data).forEach(([k,v])=>{
+    if(k==='_emp')return;
+    if(prodOrders[k]){
+      prodOrders[k].tookTs='tookTs' in v ? v.tookTs : prodOrders[k].tookTs;
+      if(v.endTs) prodOrders[k].endTs=v.endTs;
+      if(v.doneMs) prodOrders[k].doneMs=v.doneMs;
+      if(v.workMs) prodOrders[k].workMs=v.workMs;
+      if(v.wk) prodOrders[k].wk=v.wk;
+    } else {
+      prodOrders[k]=Object.assign({_key:k, tookTs:null, endTs:null, doneMs:null, workMs:null, wk:null},v);
+    }
+  });
+  render();
+});
+
+window._saveEmp=function(obj){
+  set(ref(db,'production/_emp'),obj).catch(console.error);
+};
+window._saveProd=function(key,o){
+  update(ref(db,'production/'+key),{endTs:o.endTs,doneMs:o.doneMs,wk:o.wk}).catch(console.error);
+};
+</script>
+</body>
+</html>
